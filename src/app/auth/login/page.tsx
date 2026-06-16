@@ -1,16 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, X, Loader2 } from "lucide-react";
+import axios, { AxiosError } from "axios";
 import { FormData } from "./types";
 import { validateField } from "./helpers";
 import { InputField } from "@/components/input-field";
 import { BrandPanel, ErrorBanner } from "./components";
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.ratelimitr.com/v1";
+
 export default function LoginPage() {
   const router = useRouter();
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [formData, setFormData] = useState<FormData>({
     email: "",
@@ -26,6 +31,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("ratelimitr_token");
+    const user = localStorage.getItem("ratelimitr_user");
+    if (token && user) {
+      router.replace("/dashboard");
+    } else {
+      setCheckingAuth(false);
+    }
+  }, [router]);
+
+  if (checkingAuth) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -67,36 +84,30 @@ export default function LoginPage() {
     if (!validateAll()) return;
 
     setIsSubmitting(true);
-
+    console.log("the api error is this", apiError);
     try {
-      const res = await fetch("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
+      const { data } = await axios.post(`${API_BASE_URL}/auth/login`, {
+        email: formData.email,
+        password: formData.password,
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          data.message || "Invalid email or password. Please try again.",
-        );
-      }
+      console.log("the data from the api is", data);
 
-      const data = await res.json();
-
-      // Store token and user
       localStorage.setItem("ratelimitr_token", data.token);
       localStorage.setItem("ratelimitr_user", JSON.stringify(data.user));
 
-      // Redirect to dashboard
       router.push("/dashboard");
-    } catch (err) {
-      setApiError(
-        err instanceof Error ? err.message : "An unexpected error occurred",
-      );
+    } catch (err: any) {
+      if (axios.isAxiosError(err)) {
+        console.log;
+        setApiError(
+          err.message || "Invalid email or password. Please try again.",
+        );
+      } else {
+        setApiError(
+          err instanceof Error ? err.message : "An unexpected error occurred",
+        );
+      }
       setIsSubmitting(false);
     }
   };
@@ -138,7 +149,12 @@ export default function LoginPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="space-y-5"
+            suppressHydrationWarning
+          >
             {/* Email */}
             <InputField
               label="Email"
@@ -183,14 +199,14 @@ export default function LoginPage() {
             />
 
             {/* Forgot password link */}
-            <div className="flex justify-end -mt-2">
+            {/* <div className="flex justify-end -mt-2">
               <Link
                 href="/auth/forgot-password"
                 className="text-[13px] text-[#1A1A2E]/50 hover:text-[#1A1A2E] transition-colors tracking-[-0.01em] underline underline-offset-2 decoration-[#1A1A2E]/20 hover:decoration-[#1A1A2E]/50"
               >
                 Forgot password?
               </Link>
-            </div>
+            </div> */}
 
             {/* Submit button */}
             <button

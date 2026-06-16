@@ -1,8 +1,8 @@
 "use client";
 import { useCallback } from "react";
+import axios, { AxiosRequestConfig } from "axios";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.ratelimitr.com/v1";
+const API_BASE_URL = "/backend";
 
 export function getAuthHeader() {
   if (typeof window === "undefined") return {};
@@ -12,32 +12,36 @@ export function getAuthHeader() {
 
 export async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {},
+  options: AxiosRequestConfig & { body?: string } = {},
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    // headers: {
-    //   "Content-Type": "application/json",
-    //   ...getAuthHeader(),
-    //   ...options.headers,
-    // },
-  });
+  const { body, ...axiosOptions } = options;
+  try {
+    const res = await axios({
+      url: `${API_BASE_URL}${endpoint}`,
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      ...axiosOptions,
+      ...(body ? { data: body } : {}),
+    });
 
-  if (res.status === 401) {
-    localStorage.removeItem("ratelimitr_token");
-    localStorage.removeItem("ratelimitr_user");
-    if (typeof window !== "undefined") {
-      window.location.href = "/auth/login";
+    return res.data;
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem("ratelimitr_token");
+        localStorage.removeItem("ratelimitr_user");
+        if (typeof window !== "undefined") {
+          window.location.href = "/auth/login";
+        }
+      }
+      throw new Error(
+        err.response?.data?.message || err.message || "API request failed",
+      );
     }
-    throw new Error("Unauthorized");
+    throw err;
   }
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "API request failed");
-  }
-
-  return res.json();
 }
 
 export function useApi<T>(

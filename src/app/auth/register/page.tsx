@@ -1,6 +1,6 @@
 "use client";
 import { InputField } from "@/components/input-field";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,6 +11,10 @@ import {
   ArrowRight,
   Loader2,
 } from "lucide-react";
+import axios from "axios";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.ratelimitr.com/v1";
 import { FormData } from "./types";
 import { ErrorBanner } from "@/components/error-banner";
 import { validateField } from "./helpers";
@@ -18,6 +22,7 @@ import { BrandPanel } from "./components";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
@@ -38,6 +43,18 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("ratelimitr_token");
+    const user = localStorage.getItem("ratelimitr_user");
+    if (token && user) {
+      router.replace("/dashboard");
+    } else {
+      setCheckingAuth(false);
+    }
+  }, [router]);
+
+  if (checkingAuth) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -82,38 +99,30 @@ export default function SignUpPage() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          password: formData.password,
-          organizationName: formData.organizationName,
-          organizationEmail: formData.organizationEmail,
-        }),
+      const { data } = await axios.post(`${API_BASE_URL}/auth/register`, {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+        organizationName: formData.organizationName,
+        organizationEmail: formData.organizationEmail,
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          data.message || "Failed to create account. Please try again.",
-        );
-      }
-
-      const data = await res.json();
-
-      // Store token and user
       localStorage.setItem("ratelimitr_token", data.token);
       localStorage.setItem("ratelimitr_user", JSON.stringify(data.user));
 
-      // Redirect to dashboard
       router.push("/dashboard");
     } catch (err) {
-      setApiError(
-        err instanceof Error ? err.message : "An unexpected error occurred",
-      );
+      if (axios.isAxiosError(err)) {
+        setApiError(
+          err.response?.data?.message ||
+            "Failed to create account. Please try again.",
+        );
+      } else {
+        setApiError(
+          err instanceof Error ? err.message : "An unexpected error occurred",
+        );
+      }
       setIsSubmitting(false);
     }
   };
@@ -155,7 +164,7 @@ export default function SignUpPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5" suppressHydrationWarning>
             {/* Name row */}
             <div className="grid grid-cols-2 gap-4">
               <InputField
