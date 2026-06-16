@@ -2,6 +2,8 @@
 
 Marketing site and dashboard for [RateLimitr](https://ratelimitr.com), a production-grade rate limiting service. Built with Next.js 16, React 19, and Tailwind CSS v4.
 
+**Live site:** [rate-limiter-frontend-beta.vercel.app](https://rate-limiter-frontend-beta.vercel.app)
+
 ## Backend
 
 The backend API and rate-limiting engine lives at [github.com/iyanubruce/rate-limiter](https://github.com/iyanubruce/rate-limiter).
