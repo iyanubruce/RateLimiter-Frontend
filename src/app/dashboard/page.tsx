@@ -1,223 +1,204 @@
 "use client";
-import { useCallback } from "react";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.ratelimitr.com/v1";
-
-export function getAuthHeader() {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("ratelimitr_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-export async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    // headers: {
-    //   "Content-Type": "application/json",
-    //   ...getAuthHeader(),
-    //   ...options.headers,
-    // },
-  });
-
-  if (res.status === 401) {
-    localStorage.removeItem("ratelimitr_token");
-    localStorage.removeItem("ratelimitr_user");
-    if (typeof window !== "undefined") {
-      window.location.href = "/auth/login";
-    }
-    throw new Error("Unauthorized");
-  }
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "API request failed");
-  }
-
-  return res.json();
-}
-
-export function useApi<T>(
-  endpoint: string,
-  params?: Record<string, any>,
-  deps: any[] = [],
-) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const queryParams = params
-        ? `?${new URLSearchParams(params).toString()}`
-        : "";
-      const res = await apiRequest<T>(`${endpoint}${queryParams}`);
-      setData(res);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint, JSON.stringify(params), ...deps]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  return { data, loading, error, refetch: fetchData };
-}
-
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useApi } from "./layout";
 import {
-  LayoutDashboard,
-  KeyRound,
-  BarChart3,
-  CreditCard,
-  LogOut,
-  FileText,
-  ChevronDown,
-  Menu,
-  X,
+  Activity,
+  ShieldAlert,
+  Percent,
+  Clock,
+  ArrowUpRight,
 } from "lucide-react";
-import { useState, useEffect } from "react";
 
-const navLinks = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/api-keys", label: "API Keys", icon: KeyRound },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
-];
+export default function OverviewPage() {
+  const [dateRange, setDateRange] = useState({
+    startDate: "2023-10-01",
+    endDate: "2023-10-02",
+  }); // Mock default last 24h
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [user, setUser] = useState<{ firstName: string } | null>(null);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { data: overview, loading: overviewLoading } = useApi<any>(
+    "/analytics/overview",
+    dateRange,
+  );
+  const { data: events, loading: eventsLoading } = useApi<any>(
+    "/analytics/events",
+    { limit: 10 },
+  );
 
-  useEffect(() => {
-    const userData = localStorage.getItem("ratelimitr_user");
-    if (userData) {
-      try {
-        setUser(JSON.parse(userData));
-      } catch (e) {
-        router.push("/auth/login");
-      }
-    } else {
-      router.push("/auth/login");
-    }
-  }, [router]);
-
-  const handleSignOut = () => {
-    localStorage.removeItem("ratelimitr_token");
-    localStorage.removeItem("ratelimitr_user");
-    router.push("/auth/login");
-  };
+  const metrics = [
+    {
+      label: "Total Requests",
+      value: overview?.totalRequests || "0",
+      icon: Activity,
+      color: "text-blue-600",
+      bg: "bg-blue-600/10",
+    },
+    {
+      label: "Blocked Requests",
+      value: overview?.blockedRequests || "0",
+      icon: ShieldAlert,
+      color: "text-red-600",
+      bg: "bg-red-600/10",
+    },
+    {
+      label: "Block Rate",
+      value: `${overview?.blockRate || 0}%`,
+      icon: Percent,
+      color: "text-[#E8A838]",
+      bg: "bg-[#E8A838]/10",
+    },
+    {
+      label: "Avg Response Time",
+      value: `${overview?.avgResponseTimeMs || 0}ms`,
+      icon: Clock,
+      color: "text-purple-600",
+      bg: "bg-purple-600/10",
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] flex">
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 w-[240px] bg-[#1A1A2E] transform transition-transform duration-300 md:translate-x-0 md:static md:shrink-0 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
-      >
-        <div className="h-full flex flex-col">
-          <div className="h-16 flex items-center px-6 border-b border-white/10">
-            <Link
-              href="/"
-              className="font-semibold text-[#F7F5F0] tracking-[-0.02em] text-[15px]"
-            >
-              Ratelimitr
-            </Link>
-            <button
-              className="md:hidden ml-auto text-white/50"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <nav className="flex-1 py-6 px-3 space-y-1">
-            {navLinks.map((link) => {
-              const isActive = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[14px] tracking-[-0.01em] transition-colors ${
-                    isActive
-                      ? "bg-[#E8A838]/10 text-[#E8A838] font-medium"
-                      : "text-white/50 hover:text-white hover:bg-white/5"
-                  }`}
-                >
-                  <link.icon className="w-4 h-4" strokeWidth={2} />
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
+    <div className="space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h1 className="text-[24px] font-bold text-[#1A1A2E] tracking-[-0.03em]">
+          Overview
+        </h1>
+        <div className="flex items-center gap-2 bg-white border border-[#1A1A2E]/10 rounded-lg p-1">
+          <input
+            type="date"
+            className="text-[13px] bg-transparent outline-none px-2 py-1.5 text-[#1A1A2E]/70"
+            value={dateRange.startDate}
+            onChange={(e) =>
+              setDateRange({ ...dateRange, startDate: e.target.value })
+            }
+          />
+          <span className="text-[#1A1A2E]/30">to</span>
+          <input
+            type="date"
+            className="text-[13px] bg-transparent outline-none px-2 py-1.5 text-[#1A1A2E]/70"
+            value={dateRange.endDate}
+            onChange={(e) =>
+              setDateRange({ ...dateRange, endDate: e.target.value })
+            }
+          />
         </div>
-      </aside>
+      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-[#F7F5F0]/90 backdrop-blur-md border-b border-[#1A1A2E]/10 flex items-center justify-between px-4 md:px-8 sticky top-0 z-30">
-          <button
-            className="md:hidden text-[#1A1A2E]"
-            onClick={() => setMobileMenuOpen(true)}
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {metrics.map((m) => (
+          <div
+            key={m.label}
+            className="bg-white border border-[#1A1A2E]/10 rounded-xl p-5 hover:border-[#1A1A2E]/20 transition-colors"
           >
-            <Menu className="w-5 h-5" />
-          </button>
-
-          <div className="ml-auto relative">
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-2 text-[14px] text-[#1A1A2E]/70 hover:text-[#1A1A2E] transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-[#1A1A2E] text-[#F7F5F0] flex items-center justify-center font-semibold text-[12px]">
-                {user?.firstName?.[0] || "U"}
-              </div>
-              <span className="hidden sm:block">
-                {user?.firstName || "User"}
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] text-[#1A1A2E]/50 tracking-[-0.01em]">
+                {m.label}
               </span>
-              <ChevronDown className="w-4 h-4" />
-            </button>
-
-            {showUserMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowUserMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#1A1A2E]/10 py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <a
-                    href="/docs"
-                    className="flex items-center gap-2 px-4 py-2 text-[13px] text-[#1A1A2E]/70 hover:bg-[#1A1A2E]/[0.03] hover:text-[#1A1A2E] transition-colors"
-                  >
-                    <FileText className="w-4 h-4" /> Docs
-                  </a>
-                  <button
-                    onClick={handleSignOut}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-red-600/80 hover:bg-red-50 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" /> Sign out
-                  </button>
-                </div>
-              </>
-            )}
+              <div
+                className={`w-8 h-8 rounded-lg ${m.bg} flex items-center justify-center`}
+              >
+                <m.icon className={`w-4 h-4 ${m.color}`} strokeWidth={2} />
+              </div>
+            </div>
+            <div className="text-[28px] font-bold text-[#1A1A2E] tracking-[-0.03em] leading-none">
+              {overviewLoading ? "..." : m.value}
+            </div>
           </div>
-        </header>
+        ))}
+      </div>
 
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">{children}</main>
+      {/* Recent Events Table */}
+      <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#1A1A2E]/10 flex items-center justify-between">
+          <h2 className="font-semibold text-[#1A1A2E] tracking-[-0.02em]">
+            Recent Events
+          </h2>
+          <a
+            href="/dashboard/analytics"
+            className="text-[13px] text-[#1A1A2E]/50 hover:text-[#1A1A2E] flex items-center gap-1 transition-colors"
+          >
+            View all <ArrowUpRight className="w-3.5 h-3.5" />
+          </a>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-[#1A1A2E]/[0.02]">
+                {[
+                  "Time",
+                  "Identifier",
+                  "Endpoint",
+                  "Method",
+                  "Status",
+                  "Blocked",
+                  "Duration",
+                ].map((h) => (
+                  <th
+                    key={h}
+                    className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1A1A2E]/5">
+              {eventsLoading ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              ) : events?.data?.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                  >
+                    No events found
+                  </td>
+                </tr>
+              ) : (
+                (events?.data || []).map((row: any, i: number) => (
+                  <tr
+                    key={i}
+                    className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                  >
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
+                      {new Date(row.timestamp).toLocaleTimeString()}
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium">
+                      {row.identifier}
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                      {row.endpoint}
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-[11px] font-mono bg-[#1A1A2E]/5 px-2 py-1 rounded text-[#1A1A2E]/70">
+                        {row.method}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                      {row.status}
+                    </td>
+                    <td className="px-6 py-3">
+                      <span
+                        className={`text-[11px] font-medium px-2 py-1 rounded-full ${row.blocked ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
+                      >
+                        {row.blocked ? "Yes" : "No"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
+                      {row.duration}ms
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
