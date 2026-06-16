@@ -128,7 +128,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] flex">
+    <div className="min-h-screen text-black bg-[#F7F5F0] flex">
       {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 w-[240px] bg-[#1A1A2E] transform transition-transform duration-300 md:translate-x-0 md:static md:shrink-0 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}

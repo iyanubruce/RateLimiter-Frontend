@@ -51,7 +51,7 @@ export default function AnalyticsPage() {
       <div className="bg-white border border-[#1A1A2E]/10 rounded-xl p-4 flex flex-wrap items-center gap-3">
         <input
           type="date"
-          className="text-[13px] bg-[#F7F5F0] border border-[#1A1A2E]/10 rounded px-3 py-1.5 outline-none"
+          className="text-[13px] text-black bg-[#F7F5F0] border border-[#1A1A2E]/10 rounded px-3 py-1.5 outline-none"
           value={filters.startDate}
           onChange={(e) =>
             setFilters({ ...filters, startDate: e.target.value })
@@ -59,12 +59,12 @@ export default function AnalyticsPage() {
         />
         <input
           type="date"
-          className="text-[13px] bg-[#F7F5F0] border border-[#1A1A2E]/10 rounded px-3 py-1.5 outline-none"
+          className="text-[13px] text-black bg-[#F7F5F0] border border-[#1A1A2E]/10 rounded px-3 py-1.5 outline-none"
           value={filters.endDate}
           onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
         />
         <select
-          className="text-[13px] bg-[#F7F5F0] border border-[#1A1A2E]/10 rounded px-3 py-1.5 outline-none"
+          className="text-[13px] text-black bg-[#F7F5F0] border border-[#1A1A2E]/10 rounded px-2 py-1.5 outline-none"
           value={filters.interval}
           onChange={(e) => setFilters({ ...filters, interval: e.target.value })}
         >
@@ -76,7 +76,7 @@ export default function AnalyticsPage() {
         <div className="flex-1" />
         <input
           placeholder="Filter by endpoint..."
-          className="text-[13px] bg-[#F7F5F0] border border-[#1A1A2E]/10 rounded px-3 py-1.5 outline-none w-48"
+          className="text-[13px] bg-[#F7F5F0] border text-black border-[#1A1A2E]/10 rounded px-3 py-1.5 outline-none w-48"
         />
       </div>
 
