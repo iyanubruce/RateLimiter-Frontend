@@ -1,7 +1,20 @@
 @import "tailwindcss";
 
 /* @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap"); */
+@keyframes slide-in-top {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
+.slide-in-top {
+  animation: slide-in-top 0.5s ease-out forwards;
+}
 :root {
   --font-inter: "Inter", system-ui, sans-serif;
   --font-jetbrains-mono: "JetBrains Mono", monospace;
