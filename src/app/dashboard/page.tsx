@@ -9,20 +9,52 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 
-export default function OverviewPage() {
-  const [dateRange, setDateRange] = useState({
-    startDate: "2023-10-01",
-    endDate: "2023-10-02",
-  }); // Mock default last 24h
+interface OverviewData {
+  totalRequests: number;
+  blockedRequests: number;
+  blockRate: number;
+  avgResponseTimeMs: number;
+}
 
-  const { data: overview, loading: overviewLoading } = useApi<any>(
+interface EventData {
+  time: string;
+  tenantId: string;
+  ipAddress: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  isBlocked: boolean;
+  requestDurationMs: number;
+}
+
+interface EventsResponse {
+  events: EventData[];
+  totalEvents: number;
+  total: number;
+}
+
+function toDateString(ts: number) {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+export default function OverviewPage() {
+  const now = Date.now();
+  const [dateRange, setDateRange] = useState({
+    startDate: toDateString(now - 7 * 86400000),
+    endDate: toDateString(now),
+  });
+
+  const { data: overview, loading: overviewLoading } = useApi<OverviewData>(
     "/analytics/overview",
     dateRange,
   );
-  const { data: events, loading: eventsLoading } = useApi<any>(
+
+  const { data: events, loading: eventsLoading } = useApi<EventsResponse>(
     "/analytics/events",
     { limit: 10 },
   );
+
+  console.log(events);
 
   const metrics = [
     {
@@ -119,9 +151,9 @@ export default function OverviewPage() {
             View all <ArrowUpRight className="w-3.5 h-3.5" />
           </a>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[400px] overflow-y-auto">
           <table className="w-full text-left">
-            <thead>
+            <thead className="sticky top-0 bg-white">
               <tr className="bg-[#1A1A2E]/[0.02]">
                 {[
                   "Time",
@@ -151,7 +183,7 @@ export default function OverviewPage() {
                     Loading...
                   </td>
                 </tr>
-              ) : events?.data?.length === 0 ? (
+              ) : events?.events?.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
@@ -161,16 +193,16 @@ export default function OverviewPage() {
                   </td>
                 </tr>
               ) : (
-                (events?.data || []).map((row: any, i: number) => (
+                (events?.events || []).map((row, i) => (
                   <tr
                     key={i}
                     className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
                   >
                     <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
-                      {new Date(row.timestamp).toLocaleTimeString()}
+                      {new Date(row.time).toLocaleString()}
                     </td>
                     <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium">
-                      {row.identifier}
+                      {row.ipAddress}
                     </td>
                     <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
                       {row.endpoint}
@@ -181,17 +213,17 @@ export default function OverviewPage() {
                       </span>
                     </td>
                     <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
-                      {row.status}
+                      {row.statusCode}
                     </td>
                     <td className="px-6 py-3">
                       <span
-                        className={`text-[11px] font-medium px-2 py-1 rounded-full ${row.blocked ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
+                        className={`text-[11px] font-medium px-2 py-1 rounded-full ${row.isBlocked ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
                       >
-                        {row.blocked ? "Yes" : "No"}
+                        {row.isBlocked ? "Yes" : "No"}
                       </span>
                     </td>
                     <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
-                      {row.duration}ms
+                      {row.requestDurationMs}ms
                     </td>
                   </tr>
                 ))

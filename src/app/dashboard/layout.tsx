@@ -1,8 +1,7 @@
 "use client";
 import { useCallback } from "react";
 import axios, { AxiosRequestConfig } from "axios";
-
-const API_BASE_URL = "/backend";
+import { API_BASE_URL } from "@/lib";
 
 export function getAuthHeader() {
   if (typeof window === "undefined") return {};

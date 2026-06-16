@@ -4,14 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, X, Loader2 } from "lucide-react";
-import axios, { AxiosError } from "axios";
+import axios from "axios";
 import { FormData } from "./types";
 import { validateField } from "./helpers";
 import { InputField } from "@/components/input-field";
 import { BrandPanel, ErrorBanner } from "./components";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.ratelimitr.com/v1";
+import { API_BASE_URL } from "@/lib";
 
 export default function LoginPage() {
   const router = useRouter();

@@ -12,9 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import axios from "axios";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.ratelimitr.com/v1";
+import { API_BASE_URL } from "@/lib";
 import { FormData } from "./types";
 import { ErrorBanner } from "@/components/error-banner";
 import { validateField } from "./helpers";
@@ -164,7 +162,12 @@ export default function SignUpPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate className="space-y-5" suppressHydrationWarning>
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="space-y-5"
+            suppressHydrationWarning
+          >
             {/* Name row */}
             <div className="grid grid-cols-2 gap-4">
               <InputField
