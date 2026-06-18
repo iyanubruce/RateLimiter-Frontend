@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { apiRequest } from "../layout";
+import { apiRequest } from "@/lib";
 import { Check, Loader2 } from "lucide-react";
 
 function decodeJWT(token: string) {

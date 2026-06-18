@@ -1,22 +1,31 @@
 "use client";
 import { useState } from "react";
-import { useApi, apiRequest } from "../layout";
+import { useApi, apiRequest } from "@/lib";
 import {
   Plus,
   Copy,
   Pencil,
   Trash2,
   X,
-  Check,
   ChevronDown,
   ChevronUp,
   AlertTriangle,
 } from "lucide-react";
+import {
+  ApiKey,
+  CreateKeyInput,
+  ListApiKeysResponse,
+  RateLimitOverride,
+} from "./types";
 
 export default function ApiKeysPage() {
-  const { data, loading, refetch } = useApi<any>("/api-keys/keys", {
-    limit: 50,
-  });
+  const { data, loading, refetch } = useApi<ListApiKeysResponse>(
+    "/api-keys/keys",
+    {
+      limit: 50,
+    },
+  );
+  console.log("api key data is", data);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
 
@@ -58,7 +67,7 @@ export default function ApiKeysPage() {
       </div>
 
       <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[800px] overflow-y-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-[#1A1A2E]/[0.02]">
@@ -85,7 +94,7 @@ export default function ApiKeysPage() {
                   </td>
                 </tr>
               ) : (
-                (data?.data || []).map((key: any) => (
+                (data?.keys || []).map((key: ApiKey) => (
                   <tr
                     key={key.id}
                     className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
@@ -96,14 +105,15 @@ export default function ApiKeysPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <code className="text-[13px] bg-[#1A1A2E]/5 px-2 py-1 rounded text-[#1A1A2E]/70 font-mono">
-                          {key.keyMasked || "sk_live_••••••••••••"}
+                          {key.keyPrefix + "_••••••••••••" ||
+                            "sk_live_••••••••••••"}
                         </code>
-                        <button
+                        {/* <button
                           onClick={() => copyToClipboard(key.key || "")}
                           className="text-[#1A1A2E]/30 hover:text-[#1A1A2E] transition-colors"
                         >
                           <Copy className="w-4 h-4" />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -120,9 +130,9 @@ export default function ApiKeysPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`text-[11px] font-medium px-2 py-1 rounded-full ${key.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}
+                        className={`text-[11px] font-medium px-2 py-1 rounded-full ${key.revokedAt === null ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}
                       >
-                        {key.status}
+                        {key.revokedAt ? "inactive" : "active"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-[13px] text-[#1A1A2E]/50">
@@ -134,7 +144,7 @@ export default function ApiKeysPage() {
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleRevoke(key.id)}
+                          onClick={() => handleRevoke(key.id.toString())}
                           className="p-1.5 text-red-500/40 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -208,12 +218,11 @@ function CreateKeyModal({
 }) {
   const [loading, setLoading] = useState(false);
   const [showOverrides, setShowOverrides] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CreateKeyInput>({
     name: "",
     description: "",
+    keyPrefix: "",
     scopes: ["read"],
-    expiresAt: "",
-    strategy: "token_bucket",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -272,11 +281,12 @@ function CreateKeyModal({
                 >
                   <input
                     type="checkbox"
-                    checked={formData.scopes.includes(scope)}
+                    checked={formData.scopes?.includes(scope) ?? false}
                     onChange={(e) => {
+                      const current = formData.scopes ?? [];
                       const newScopes = e.target.checked
-                        ? [...formData.scopes, scope]
-                        : formData.scopes.filter((s) => s !== scope);
+                        ? [...current, scope]
+                        : current.filter((s) => s !== scope);
                       setFormData({ ...formData, scopes: newScopes });
                     }}
                     className="rounded border-[#1A1A2E]/20"
@@ -307,23 +317,56 @@ function CreateKeyModal({
                   className="h-9 px-3 text-[13px] bg-white rounded border border-[#1A1A2E]/10 outline-none"
                   placeholder="Req/Sec"
                   type="number"
+                  value={formData.rateLimitOverride?.requestsPerSecond ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      rateLimitOverride: {
+                        ...formData.rateLimitOverride,
+                        requestsPerSecond:
+                          e.target.value === ""
+                            ? undefined
+                            : Number(e.target.value),
+                      },
+                    })
+                  }
                 />
                 <input
                   className="h-9 px-3 text-[13px] bg-white rounded border border-[#1A1A2E]/10 outline-none"
                   placeholder="Burst Size"
                   type="number"
+                  value={formData.rateLimitOverride?.burstSize ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      rateLimitOverride: {
+                        ...formData.rateLimitOverride,
+                        burstSize:
+                          e.target.value === ""
+                            ? undefined
+                            : Number(e.target.value),
+                      },
+                    })
+                  }
                 />
               </div>
               <select
                 className="w-full h-9 px-3 text-[13px] bg-white rounded border border-[#1A1A2E]/10 outline-none"
-                value={formData.strategy}
+                value={formData.rateLimitOverride?.strategy ?? undefined}
                 onChange={(e) =>
-                  setFormData({ ...formData, strategy: e.target.value })
+                  setFormData({
+                    ...formData,
+                    rateLimitOverride: {
+                      ...formData.rateLimitOverride,
+                      strategy: e.target.value as RateLimitOverride["strategy"],
+                    },
+                  })
                 }
               >
-                <option value="token_bucket">Token Bucket</option>
-                <option value="sliding_window">Sliding Window</option>
-                <option value="fixed_window">Fixed Window</option>
+                <option value="">Default</option>
+                <option value="token-bucket">Token Bucket</option>
+                <option value="sliding-window">Sliding Window</option>
+                <option value="fixed-window">Fixed Window</option>
               </select>
             </div>
           )}
