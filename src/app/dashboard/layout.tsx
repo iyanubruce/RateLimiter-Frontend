@@ -1,76 +1,4 @@
 "use client";
-import { useCallback } from "react";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.ratelimitr.com/v1";
-
-export function getAuthHeader() {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("ratelimitr_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-export async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    // headers: {
-    //   "Content-Type": "application/json",
-    //   ...getAuthHeader(),
-    //   ...options.headers,
-    // },
-  });
-
-  if (res.status === 401) {
-    localStorage.removeItem("ratelimitr_token");
-    localStorage.removeItem("ratelimitr_user");
-    if (typeof window !== "undefined") {
-      window.location.href = "/auth/login";
-    }
-    throw new Error("Unauthorized");
-  }
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "API request failed");
-  }
-
-  return res.json();
-}
-
-export function useApi<T>(
-  endpoint: string,
-  params?: Record<string, any>,
-  deps: any[] = [],
-) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const queryParams = params
-        ? `?${new URLSearchParams(params).toString()}`
-        : "";
-      const res = await apiRequest<T>(`${endpoint}${queryParams}`);
-      setData(res);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint, JSON.stringify(params), ...deps]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  return { data, loading, error, refetch: fetchData };
-}
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -86,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { loadFromStorage, logout } from "@/store/slices/authSlice";
 
 const navLinks = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -101,29 +31,24 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ firstName: string } | null>({
-    firstName: "Iyanuoluwa",
-  });
+  const dispatch = useAppDispatch();
+  const { user } = useAppSelector((state) => state.auth);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
+    dispatch(loadFromStorage());
+  }, [dispatch]);
+
+  useEffect(() => {
     const userData = localStorage.getItem("ratelimitr_user");
-    if (userData) {
-      try {
-        setUser(JSON.parse(userData));
-      } catch (e) {
-        router.push("/auth/login");
-      }
-    } else {
-      console.log("supposed to push to login page");
-      //   router.push("/auth/login");
+    if (!userData) {
+      router.push("/auth/login");
     }
-  }, [router]);
+  }, [router, user]);
 
   const handleSignOut = () => {
-    localStorage.removeItem("ratelimitr_token");
-    localStorage.removeItem("ratelimitr_user");
+    dispatch(logout());
     router.push("/auth/login");
   };
 

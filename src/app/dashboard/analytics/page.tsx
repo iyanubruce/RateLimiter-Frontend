@@ -1,6 +1,14 @@
 "use client";
-import { useState } from "react";
-import { useApi } from "../layout";
+import { useState, useMemo, useEffect } from "react";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  fetchTimeseries,
+  fetchEvents,
+  fetchTopBlocked,
+  fetchPatterns,
+  fetchStatusCodes,
+  fetchEndpoints,
+} from "@/store/slices/analyticsSlice";
 import {
   AreaChart,
   Area,
@@ -10,36 +18,105 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import type {
+  AnalyticsEvent,
+  GetEventsResponse,
+  GetTopBlockedResponse,
+  PatternsData,
+  GetStatusCodesResponse,
+  GetEndpointsResponse,
+} from "./types";
 
 const tabs = [
   "Events",
   "Endpoints",
   "Top Blocked",
   "Status Codes",
-  "IP Addresses",
   "Patterns",
 ] as const;
+
 type Tab = (typeof tabs)[number];
 
+function toDateString(ts: number) {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function formatDateTime(dateStr: string) {
+  const date = new Date(dateStr);
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatTime(dateStr: string) {
+  const date = new Date(dateStr);
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+const INTERVAL_SECONDS: Record<string, number> = {
+  "1m": 60,
+  "5m": 300,
+  "1h": 3600,
+  "1d": 86400,
+};
+
 export default function AnalyticsPage() {
+  const dispatch = useAppDispatch();
+  const {
+    timeseries: chartData,
+    events: eventsData,
+    eventsLoading,
+    topBlocked: topBlockedData,
+    topBlockedLoading,
+    patterns: patternsData,
+    patternsLoading,
+    statusCodes: statusCodesData,
+    statusCodesLoading,
+    endpoints: endpointsData,
+    endpointsLoading,
+  } = useAppSelector((state) => state.analytics);
+
   const [activeTab, setActiveTab] = useState<Tab>("Events");
+  const now = Date.now();
   const [filters, setFilters] = useState({
-    startDate: "2023-10-01",
-    endDate: "2023-10-02",
+    startDate: toDateString(now - 7 * 86400000),
+    endDate: toDateString(now),
     interval: "1h",
   });
 
-  const { data: chartData } = useApi<any>("/analytics/timeseries", filters);
+  const [eventsPage, setEventsPage] = useState(0);
+  const eventsLimit = 20;
 
-  // Mock data for chart visualization if API is empty
-  const mockChartData = chartData?.data || [
-    { time: "00:00", total: 1200, blocked: 45 },
-    { time: "04:00", total: 1800, blocked: 120 },
-    { time: "08:00", total: 3400, blocked: 310 },
-    { time: "12:00", total: 4100, blocked: 450 },
-    { time: "16:00", total: 3800, blocked: 290 },
-    { time: "20:00", total: 2100, blocked: 80 },
-  ];
+  useEffect(() => {
+    dispatch(fetchTimeseries(filters));
+    dispatch(fetchTopBlocked(filters));
+    dispatch(fetchPatterns(filters));
+    dispatch(fetchStatusCodes(filters));
+    dispatch(fetchEndpoints(filters));
+  }, [dispatch, filters.startDate, filters.endDate, filters.interval]);
+
+  useEffect(() => {
+    dispatch(
+      fetchEvents({ limit: eventsLimit, offset: eventsPage * eventsLimit }),
+    );
+  }, [dispatch, eventsPage]);
+
+  const chartDataWithRps = useMemo(() => {
+    const intervalSeconds = INTERVAL_SECONDS[filters.interval] || 3600;
+    return chartData?.timeseries?.map((point) => ({
+      ...point,
+      requestsPerSecond: Number(point.totalRequests) / intervalSeconds,
+    }));
+  }, [chartData, filters.interval]);
 
   return (
     <div className="space-y-6">
@@ -86,8 +163,8 @@ export default function AnalyticsPage() {
           Traffic Overview
         </h3>
         <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={mockChartData}>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={chartDataWithRps}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 vertical={false}
@@ -114,7 +191,7 @@ export default function AnalyticsPage() {
               />
               <Area
                 type="monotone"
-                dataKey="total"
+                dataKey="totalRequests"
                 stackId="1"
                 stroke="#3b82f6"
                 fill="#3b82f6"
@@ -123,11 +200,19 @@ export default function AnalyticsPage() {
               />
               <Area
                 type="monotone"
-                dataKey="blocked"
+                dataKey="blockedRequests"
                 stackId="1"
                 stroke="#ef4444"
                 fill="#ef4444"
                 fillOpacity={0.15}
+                strokeWidth={2}
+              />
+              <Area
+                type="monotone"
+                dataKey="requestsPerSecond"
+                stroke="#10b981"
+                fill="#10b981"
+                fillOpacity={0.1}
                 strokeWidth={2}
               />
             </AreaChart>
@@ -141,29 +226,660 @@ export default function AnalyticsPage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`pb-3 text-[14px] font-medium tracking-[-0.01em] transition-colors border-b-2 whitespace-nowrap ${activeTab === tab ? "border-[#1A1A2E] text-[#1A1A2E]" : "border-transparent text-[#1A1A2E]/40 hover:text-[#1A1A2E]/70"}`}
+            className={`pb-3 text-[14px] font-medium tracking-[-0.01em] transition-colors border-b-2 whitespace-nowrap ${
+              activeTab === tab
+                ? "border-[#1A1A2E] text-[#1A1A2E]"
+                : "border-transparent text-[#1A1A2E]/40 hover:text-[#1A1A2E]/70"
+            }`}
           >
             {tab}
           </button>
         ))}
       </div>
 
-      {/* Tab Content Placeholder */}
-      <div className="bg-white border border-[#1A1A2E]/10 rounded-xl p-8 text-center">
-        <p className="text-[14px] text-[#1A1A2E]/40">
-          Displaying{" "}
-          <span className="font-medium text-[#1A1A2E]">{activeTab}</span> data.
-          (Implement specific table logic per tab using the{" "}
-          <code className="bg-[#1A1A2E]/5 px-1 py-0.5 rounded text-[12px]">
-            useApi
-          </code>{" "}
-          hook with endpoints like{" "}
-          <code className="bg-[#1A1A2E]/5 px-1 py-0.5 rounded text-[12px]">
-            /analytics/{activeTab.toLowerCase().replace(" ", "-")}
-          </code>
-          )
-        </p>
+      {/* Tab Content */}
+      {activeTab === "Events" && (
+        <EventsTable
+          data={eventsData}
+          loading={eventsLoading}
+          page={eventsPage}
+          onPageChange={setEventsPage}
+          limit={eventsLimit}
+        />
+      )}
+
+      {activeTab === "Endpoints" && (
+        <EndpointsTable data={endpointsData} loading={endpointsLoading} />
+      )}
+
+      {activeTab === "Top Blocked" && (
+        <TopBlockedTable data={topBlockedData} loading={topBlockedLoading} />
+      )}
+
+      {activeTab === "Status Codes" && (
+        <StatusCodesTable data={statusCodesData} loading={statusCodesLoading} />
+      )}
+
+      {activeTab === "Patterns" && (
+        <PatternsTable data={patternsData} loading={patternsLoading} />
+      )}
+    </div>
+  );
+}
+
+// Events Table
+function EventsTable({
+  data,
+  loading,
+  page,
+  onPageChange,
+  limit,
+}: {
+  data: GetEventsResponse | null;
+  loading: boolean;
+  page: number;
+  onPageChange: (page: number) => void;
+  limit: number;
+}) {
+  const totalPages = data ? Math.ceil(data.total / limit) : 0;
+
+  return (
+    <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-[#1A1A2E]/[0.02]">
+              {[
+                "Time",
+                "IP Address",
+                "Endpoint",
+                "Method",
+                "Status",
+                "Blocked",
+                "Duration",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#1A1A2E]/5">
+            {loading ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  Loading...
+                </td>
+              </tr>
+            ) : !data?.events?.length ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  No events found
+                </td>
+              </tr>
+            ) : (
+              data.events.map((event, i) => (
+                <tr
+                  key={i}
+                  className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                >
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
+                    {formatTime(event.time)}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium">
+                    {event.ipAddress}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                    {event.endpoint}
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-[11px] font-mono bg-[#1A1A2E]/5 px-2 py-1 rounded text-[#1A1A2E]/70">
+                      {event.method}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                    {event.statusCode}
+                  </td>
+                  <td className="px-6 py-3">
+                    <span
+                      className={`text-[11px] font-medium px-2 py-1 rounded-full ${
+                        event.isBlocked
+                          ? "bg-red-100 text-red-700"
+                          : "bg-green-100 text-green-700"
+                      }`}
+                    >
+                      {event.isBlocked ? "Yes" : "No"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
+                    {event.requestDurationMs}ms
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="px-6 py-4 border-t border-[#1A1A2E]/10 flex items-center justify-between">
+          <div className="text-[13px] text-[#1A1A2E]/50">
+            Page {page + 1} of {totalPages}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onPageChange(page - 1)}
+              disabled={page === 0}
+              className="p-2 rounded-lg border border-[#1A1A2E]/10 text-[#1A1A2E]/50 hover:bg-[#1A1A2E]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages - 1}
+              className="p-2 rounded-lg border border-[#1A1A2E]/10 text-[#1A1A2E]/50 hover:bg-[#1A1A2E]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Endpoints Table
+function EndpointsTable({
+  data,
+  loading,
+}: {
+  data: GetEndpointsResponse | null;
+  loading: boolean;
+}) {
+  return (
+    <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-[#1A1A2E]/[0.02]">
+              {[
+                "Endpoint",
+                "Method",
+                "Total Requests",
+                "Blocked",
+                "Block Rate",
+                "Avg Duration",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#1A1A2E]/5">
+            {loading ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  Loading...
+                </td>
+              </tr>
+            ) : !data?.endpoints?.length ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  No endpoints found
+                </td>
+              </tr>
+            ) : (
+              data.endpoints.map((endpoint, i) => (
+                <tr
+                  key={i}
+                  className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                >
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium">
+                    {endpoint.endpoint}
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-[11px] font-mono bg-[#1A1A2E]/5 px-2 py-1 rounded text-[#1A1A2E]/70">
+                      {endpoint.method}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                    {endpoint.totalRequests.toLocaleString()}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                    {endpoint.blockedRequests.toLocaleString()}
+                  </td>
+                  <td className="px-6 py-3">
+                    <span
+                      className={`text-[13px] font-medium ${
+                        endpoint.blockRate > 50
+                          ? "text-red-600"
+                          : endpoint.blockRate > 20
+                            ? "text-[#E8A838]"
+                            : "text-green-600"
+                      }`}
+                    >
+                      {endpoint.blockRate}%
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
+                    {Math.round(endpoint.avgDuration)}ms
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Top Blocked Table
+function TopBlockedTable({
+  data,
+  loading,
+}: {
+  data: GetTopBlockedResponse | null;
+  loading: boolean;
+}) {
+  return (
+    <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-[#1A1A2E]/[0.02]">
+              {[
+                "IP Address",
+                "Endpoint",
+                "Block Count",
+                "First Block",
+                "Last Block",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#1A1A2E]/5">
+            {loading ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  Loading...
+                </td>
+              </tr>
+            ) : !data?.topBlocked?.length ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  No blocked IPs found
+                </td>
+              </tr>
+            ) : (
+              data.topBlocked.map((item, i) => (
+                <tr
+                  key={i}
+                  className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                >
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium font-mono">
+                    {item.ipAddress}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                    {item.endpoint}
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-[13px] font-semibold text-red-600 bg-red-50 px-2 py-1 rounded">
+                      {item.blockCount}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60">
+                    {formatDateTime(item.firstBlock)}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60">
+                    {formatDateTime(item.lastBlock)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Status Codes Table
+function StatusCodesTable({
+  data,
+  loading,
+}: {
+  data: GetStatusCodesResponse | null;
+  loading: boolean;
+}) {
+  return (
+    <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-[#1A1A2E]/[0.02]">
+              {["Status Code", "Count", "Blocked"].map((h) => (
+                <th
+                  key={h}
+                  className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#1A1A2E]/5">
+            {loading ? (
+              <tr>
+                <td
+                  colSpan={3}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  Loading...
+                </td>
+              </tr>
+            ) : !data?.statusCodes?.length ? (
+              <tr>
+                <td
+                  colSpan={3}
+                  className="px-6 py-8 text-center text-[#1A1A2E]/40"
+                >
+                  No status codes found
+                </td>
+              </tr>
+            ) : (
+              data.statusCodes.map((item, i) => (
+                <tr
+                  key={i}
+                  className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                >
+                  <td className="px-6 py-3">
+                    <span
+                      className={`text-[13px] font-mono font-semibold px-2 py-1 rounded ${
+                        item.statusCode >= 400
+                          ? "bg-red-50 text-red-700"
+                          : item.statusCode >= 300
+                            ? "bg-[#E8A838]/10 text-[#E8A838]"
+                            : "bg-green-50 text-green-700"
+                      }`}
+                    >
+                      {item.statusCode}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                    {item.count.toLocaleString()}
+                  </td>
+                  <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                    {item.blocked.toLocaleString()}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Patterns Table
+function PatternsTable({
+  data,
+  loading,
+}: {
+  data: PatternsData | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="bg-white border border-[#1A1A2E]/10 rounded-xl p-8 text-center text-[#1A1A2E]/40">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="bg-white border border-[#1A1A2E]/10 rounded-xl p-8 text-center text-[#1A1A2E]/40">
+        No pattern data found
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Card */}
+      <div className="bg-white border border-[#1A1A2E]/10 rounded-xl p-6">
+        <div className="text-[13px] text-[#1A1A2E]/50 mb-2">
+          Total Unique IPs
+        </div>
+        <div className="text-[32px] font-bold text-[#1A1A2E] tracking-[-0.03em]">
+          {data.totalUniqueIps.toLocaleString()}
+        </div>
+      </div>
+
+      {/* Suspicious Patterns */}
+      {data.suspiciousPatterns.length > 0 && (
+        <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#1A1A2E]/10">
+            <h3 className="font-semibold text-[#1A1A2E] tracking-[-0.02em]">
+              Suspicious IPs
+            </h3>
+            <p className="text-[13px] text-[#1A1A2E]/50 mt-1">
+              IPs with block rate &gt; 50% and &gt; 100 requests
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-[#1A1A2E]/[0.02]">
+                  {["IP Address", "Total Requests", "Block Rate", "Reason"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1A1A2E]/5">
+                {data.suspiciousPatterns.map((pattern, i) => (
+                  <tr
+                    key={i}
+                    className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                  >
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium font-mono">
+                      {pattern.ipAddress}
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                      {pattern.totalRequests.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-[13px] font-semibold text-red-600">
+                        {pattern.blockRate}%
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60">
+                      {pattern.reason}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Burst Patterns */}
+      {data.burstPatterns.length > 0 && (
+        <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#1A1A2E]/10">
+            <h3 className="font-semibold text-[#1A1A2E] tracking-[-0.02em]">
+              Burst Patterns
+            </h3>
+            <p className="text-[13px] text-[#1A1A2E]/50 mt-1">
+              IPs hitting 20+ endpoints with &gt; 20% block rate
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-[#1A1A2E]/[0.02]">
+                  {[
+                    "IP Address",
+                    "Endpoints Hit",
+                    "Block Rate",
+                    "Time Window",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1A1A2E]/5">
+                {data.burstPatterns.map((pattern, i) => (
+                  <tr
+                    key={i}
+                    className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                  >
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium font-mono">
+                      {pattern.ipAddress}
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                      {pattern.endpointsHit}
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-[13px] font-semibold text-[#E8A838]">
+                        {pattern.blockRate}%
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60">
+                      {pattern.timeWindow}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Top Talkers */}
+      {data.topTalkers.length > 0 && (
+        <div className="bg-white border border-[#1A1A2E]/10 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#1A1A2E]/10">
+            <h3 className="font-semibold text-[#1A1A2E] tracking-[-0.02em]">
+              Top Talkers
+            </h3>
+            <p className="text-[13px] text-[#1A1A2E]/50 mt-1">
+              Highest volume IP addresses
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-[#1A1A2E]/[0.02]">
+                  {[
+                    "IP Address",
+                    "Total Requests",
+                    "Blocked",
+                    "Block Rate",
+                    "Avg Duration",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="text-[11px] font-medium text-[#1A1A2E]/40 uppercase tracking-wider px-6 py-3"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1A1A2E]/5">
+                {data.topTalkers.map((talker, i) => (
+                  <tr
+                    key={i}
+                    className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
+                  >
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E] font-medium font-mono">
+                      {talker.ipAddress}
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                      {talker.totalRequests}
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/70">
+                      {talker.blockedRequests}
+                    </td>
+                    <td className="px-6 py-3">
+                      <span
+                        className={`text-[13px] font-medium ${
+                          talker.blockRate > 50
+                            ? "text-red-600"
+                            : talker.blockRate > 20
+                              ? "text-[#E8A838]"
+                              : "text-green-600"
+                        }`}
+                      >
+                        {talker.blockRate}%
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-[13px] text-[#1A1A2E]/60 font-mono">
+                      {Math.round(talker.avgDuration)}ms
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {data.suspiciousPatterns.length === 0 &&
+        data.burstPatterns.length === 0 &&
+        data.topTalkers.length === 0 && (
+          <div className="bg-white border border-[#1A1A2E]/10 rounded-xl p-8 text-center text-[#1A1A2E]/40">
+            No suspicious patterns detected
+          </div>
+        )}
     </div>
   );
 }
