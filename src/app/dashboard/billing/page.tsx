@@ -1,50 +1,23 @@
 "use client";
-import { useState, useEffect } from "react";
-import { apiRequest } from "../layout";
+import { useEffect } from "react";
 import { Check, Loader2 } from "lucide-react";
-
-function decodeJWT(token: string) {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join(""),
-    );
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    return null;
-  }
-}
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { loadPlanFromToken, upgradePlan } from "@/store/slices/billingSlice";
 
 export default function BillingPage() {
-  const [currentPlan, setCurrentPlan] = useState<"free" | "pro" | "enterprise">(
-    "free",
-  );
-  const [upgrading, setUpgrading] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  const { currentPlan, upgrading } = useAppSelector((state) => state.billing);
 
   useEffect(() => {
-    const token = localStorage.getItem("ratelimitr_token");
-    if (token) {
-      const payload = decodeJWT(token);
-      if (payload?.plan) setCurrentPlan(payload.plan);
-    }
-  }, []);
+    dispatch(loadPlanFromToken());
+  }, [dispatch]);
 
-  const handleUpgrade = async (plan: "pro" | "enterprise") => {
-    setUpgrading(plan);
-    try {
-      const res = await apiRequest<{ url: string }>("/tenants/upgrade", {
-        method: "POST",
-        body: JSON.stringify({ plan }),
-      });
-      window.location.href = res.url;
-    } catch (err: any) {
-      alert(err.message);
-      setUpgrading(null);
-    }
+  const handleUpgrade = (plan: "pro" | "enterprise") => {
+    dispatch(upgradePlan(plan)).then((result) => {
+      if (upgradePlan.fulfilled.match(result)) {
+        window.location.href = result.payload.url;
+      }
+    });
   };
 
   const plans = [

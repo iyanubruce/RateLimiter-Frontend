@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, X, Loader2 } from "lucide-react";
@@ -8,9 +8,16 @@ import { FormData } from "./types";
 import { validateField } from "./helpers";
 import { InputField } from "@/components/input-field";
 import { BrandPanel, ErrorBanner } from "./components";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { login, clearError } from "@/store/slices/authSlice";
 
 export default function LoginPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { loading: authLoading, error: authError } = useAppSelector(
+    (state) => state.auth,
+  );
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [formData, setFormData] = useState<FormData>({
     email: "",
@@ -24,15 +31,24 @@ export default function LoginPage() {
     Partial<Record<keyof FormData, boolean>>
   >({});
   const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("ratelimitr_token");
+    const user = localStorage.getItem("ratelimitr_user");
+    if (token && user) {
+      router.replace("/dashboard");
+    } else {
+      setCheckingAuth(false);
+    }
+  }, [router]);
+
+  if (checkingAuth) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
     setFormData((prev) => ({ ...prev, [name]: value }));
 
-    // Re-validate if field was already touched
     if (touched[name as keyof FormData]) {
       const error = validateField(name as keyof FormData, value);
       setErrors((prev) => ({ ...prev, [name]: error }));
@@ -62,42 +78,15 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setApiError(null);
+    dispatch(clearError());
 
     if (!validateAll()) return;
 
-    setIsSubmitting(true);
-
-    try {
-      const res = await fetch("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          data.message || "Invalid email or password. Please try again.",
-        );
-      }
-
-      const data = await res.json();
-
-      // Store token and user
-      localStorage.setItem("ratelimitr_token", data.token);
-      localStorage.setItem("ratelimitr_user", JSON.stringify(data.user));
-
-      // Redirect to dashboard
+    const result = await dispatch(
+      login({ email: formData.email, password: formData.password }),
+    );
+    if (login.fulfilled.match(result)) {
       router.push("/dashboard");
-    } catch (err) {
-      setApiError(
-        err instanceof Error ? err.message : "An unexpected error occurred",
-      );
-      setIsSubmitting(false);
     }
   };
 
@@ -133,12 +122,20 @@ export default function LoginPage() {
           </div>
 
           {/* API Error Banner */}
-          {apiError && (
-            <ErrorBanner message={apiError} onClose={() => setApiError(null)} />
+          {authError && (
+            <ErrorBanner
+              message={authError}
+              onClose={() => dispatch(clearError())}
+            />
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="space-y-5"
+            suppressHydrationWarning
+          >
             {/* Email */}
             <InputField
               label="Email"
@@ -150,7 +147,7 @@ export default function LoginPage() {
               touched={!!touched.email}
               onChange={handleChange}
               onBlur={() => handleBlur("email")}
-              disabled={isSubmitting}
+              disabled={authLoading}
             />
 
             {/* Password */}
@@ -164,7 +161,7 @@ export default function LoginPage() {
               touched={!!touched.password}
               onChange={handleChange}
               onBlur={() => handleBlur("password")}
-              disabled={isSubmitting}
+              disabled={authLoading}
               rightElement={
                 <button
                   type="button"
@@ -183,27 +180,27 @@ export default function LoginPage() {
             />
 
             {/* Forgot password link */}
-            <div className="flex justify-end -mt-2">
+            {/* <div className="flex justify-end -mt-2">
               <Link
                 href="/auth/forgot-password"
                 className="text-[13px] text-[#1A1A2E]/50 hover:text-[#1A1A2E] transition-colors tracking-[-0.01em] underline underline-offset-2 decoration-[#1A1A2E]/20 hover:decoration-[#1A1A2E]/50"
               >
                 Forgot password?
               </Link>
-            </div>
+            </div> */}
 
             {/* Submit button */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={authLoading}
               className={`w-full h-12 bg-[#1A1A2E] text-[#F7F5F0] font-semibold rounded-full text-[14px] tracking-[-0.01em] transition-all flex items-center justify-center gap-2 mt-8
                 ${
-                  isSubmitting
+                  authLoading
                     ? "opacity-70 cursor-not-allowed"
                     : "hover:bg-[#2d2d4e]"
                 }`}
             >
-              {isSubmitting ? (
+              {authLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
                   Signing in...
