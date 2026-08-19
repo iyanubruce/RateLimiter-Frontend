@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import StoreProvider from "@/store/provider";
 
 export const metadata: Metadata = {
   title: "RateLimitr — Rate Limit Everything",
@@ -34,7 +35,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="bg-[#070B14] text-white antialiased">{children}</body>
+      <body className="bg-[#070B14] text-white antialiased">
+        <StoreProvider>{children}</StoreProvider>
+      </body>
     </html>
   );
 }

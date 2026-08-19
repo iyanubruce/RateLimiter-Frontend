@@ -8,30 +8,7 @@ import {
   Clock,
   ArrowUpRight,
 } from "lucide-react";
-
-interface OverviewData {
-  totalRequests: number;
-  blockedRequests: number;
-  blockRate: number;
-  avgResponseTimeMs: number;
-}
-
-interface EventData {
-  time: string;
-  tenantId: string;
-  ipAddress: string;
-  endpoint: string;
-  method: string;
-  statusCode: number;
-  isBlocked: boolean;
-  requestDurationMs: number;
-}
-
-interface EventsResponse {
-  events: EventData[];
-  totalEvents: number;
-  total: number;
-}
+import type { OverviewData, GetEventsResponse } from "./analytics/types";
 
 function toDateString(ts: number) {
   return new Date(ts).toISOString().slice(0, 10);
@@ -49,7 +26,7 @@ export default function OverviewPage() {
     dateRange,
   );
 
-  const { data: events, loading: eventsLoading } = useApi<EventsResponse>(
+  const { data: events, loading: eventsLoading } = useApi<GetEventsResponse>(
     "/analytics/events",
     { limit: 10 },
   );

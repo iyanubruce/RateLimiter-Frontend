@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { loadFromStorage, logout } from "@/store/slices/authSlice";
 
 const navLinks = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -29,28 +31,24 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ firstName: string } | null>({
-    firstName: "Iyanuoluwa",
-  });
+  const dispatch = useAppDispatch();
+  const { user } = useAppSelector((state) => state.auth);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
+    dispatch(loadFromStorage());
+  }, [dispatch]);
+
+  useEffect(() => {
     const userData = localStorage.getItem("ratelimitr_user");
-    if (userData) {
-      try {
-        setUser(JSON.parse(userData));
-      } catch (e) {
-        router.push("/auth/login");
-      }
-    } else {
+    if (!userData) {
       router.push("/auth/login");
     }
-  }, [router]);
+  }, [router, user]);
 
   const handleSignOut = () => {
-    localStorage.removeItem("ratelimitr_token");
-    localStorage.removeItem("ratelimitr_user");
+    dispatch(logout());
     router.push("/auth/login");
   };
 

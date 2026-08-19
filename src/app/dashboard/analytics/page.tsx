@@ -1,6 +1,14 @@
 "use client";
-import { useState, useMemo } from "react";
-import { useApi } from "@/lib";
+import { useState, useMemo, useEffect } from "react";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  fetchTimeseries,
+  fetchEvents,
+  fetchTopBlocked,
+  fetchPatterns,
+  fetchStatusCodes,
+  fetchEndpoints,
+} from "@/store/slices/analyticsSlice";
 import {
   AreaChart,
   Area,
@@ -11,99 +19,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-interface timeseriesData {
-  time: string;
-  totalRequests: string;
-  blockedRequests: string;
-  avgDuration: string;
-}
-
-interface GetTimeSeriesDataResponse {
-  interval: string;
-  buckets: number;
-  timeseries: timeseriesData[];
-}
-
-interface AnalyticsEvent {
-  time: string;
-  tenantId: string;
-  apiKeyId: number;
-  ipAddress: string;
-  endpoint: string;
-  method: string;
-  userAgent: string;
-  statusCode: number;
-  requestDurationMs: number;
-  responseSize: number;
-  isBlocked: boolean;
-  remainingQuota: number;
-}
-
-interface GetEventsResponse {
-  events: AnalyticsEvent[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-interface TopBlockedItem {
-  ipAddress: string;
-  endpoint: string;
-  blockCount: string;
-  firstBlock: string;
-  lastBlock: string;
-}
-
-interface GetTopBlockedResponse {
-  topBlocked: TopBlockedItem[];
-}
-
-interface PatternsData {
-  totalUniqueIps: number;
-  suspiciousPatterns: Array<{
-    ipAddress: string;
-    blockRate: number;
-    totalRequests: number;
-    reason: string;
-  }>;
-  burstPatterns: Array<{
-    ipAddress: string;
-    endpointsHit: number;
-    blockRate: number;
-    timeWindow: string;
-  }>;
-  topTalkers: Array<{
-    ipAddress: string;
-    totalRequests: number;
-    blockedRequests: number;
-    blockRate: number;
-    avgDuration: number;
-  }>;
-}
-
-interface StatusCodeData {
-  statusCode: number;
-  count: number;
-  blocked: number;
-}
-
-interface GetStatusCodesResponse {
-  statusCodes: StatusCodeData[];
-}
-
-interface EndpointData {
-  endpoint: string;
-  method: string;
-  totalRequests: number;
-  blockedRequests: number;
-  blockRate: number;
-  avgDuration: number;
-}
-
-interface GetEndpointsResponse {
-  endpoints: EndpointData[];
-}
+import type {
+  AnalyticsEvent,
+  GetEventsResponse,
+  GetTopBlockedResponse,
+  PatternsData,
+  GetStatusCodesResponse,
+  GetEndpointsResponse,
+} from "./types";
 
 const tabs = [
   "Events",
@@ -147,6 +70,21 @@ const INTERVAL_SECONDS: Record<string, number> = {
 };
 
 export default function AnalyticsPage() {
+  const dispatch = useAppDispatch();
+  const {
+    timeseries: chartData,
+    events: eventsData,
+    eventsLoading,
+    topBlocked: topBlockedData,
+    topBlockedLoading,
+    patterns: patternsData,
+    patternsLoading,
+    statusCodes: statusCodesData,
+    statusCodesLoading,
+    endpoints: endpointsData,
+    endpointsLoading,
+  } = useAppSelector((state) => state.analytics);
+
   const [activeTab, setActiveTab] = useState<Tab>("Events");
   const now = Date.now();
   const [filters, setFilters] = useState({
@@ -158,30 +96,19 @@ export default function AnalyticsPage() {
   const [eventsPage, setEventsPage] = useState(0);
   const eventsLimit = 20;
 
-  const { data: chartData } = useApi<GetTimeSeriesDataResponse>(
-    "/analytics/timeseries",
-    filters,
-  );
+  useEffect(() => {
+    dispatch(fetchTimeseries(filters));
+    dispatch(fetchTopBlocked(filters));
+    dispatch(fetchPatterns(filters));
+    dispatch(fetchStatusCodes(filters));
+    dispatch(fetchEndpoints(filters));
+  }, [dispatch, filters.startDate, filters.endDate, filters.interval]);
 
-  const { data: eventsData, loading: eventsLoading } =
-    useApi<GetEventsResponse>("/analytics/events", {
-      limit: eventsLimit,
-      offset: eventsPage * eventsLimit,
-    });
-
-  const { data: topBlockedData, loading: topBlockedLoading } =
-    useApi<GetTopBlockedResponse>("/analytics/top-blocked", filters);
-
-  const { data: patternsData, loading: patternsLoading } = useApi<PatternsData>(
-    "/analytics/patterns",
-    filters,
-  );
-
-  const { data: statusCodesData, loading: statusCodesLoading } =
-    useApi<GetStatusCodesResponse>("/analytics/status-codes", filters);
-
-  const { data: endpointsData, loading: endpointsLoading } =
-    useApi<GetEndpointsResponse>("/analytics/endpoints", filters);
+  useEffect(() => {
+    dispatch(
+      fetchEvents({ limit: eventsLimit, offset: eventsPage * eventsLimit }),
+    );
+  }, [dispatch, eventsPage]);
 
   const chartDataWithRps = useMemo(() => {
     const intervalSeconds = INTERVAL_SECONDS[filters.interval] || 3600;

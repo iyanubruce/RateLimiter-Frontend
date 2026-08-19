@@ -1,6 +1,11 @@
 "use client";
-import { useState } from "react";
-import { useApi, apiRequest } from "@/lib";
+import { useEffect, useState } from "react";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  fetchApiKeys,
+  createApiKey,
+  revokeApiKey,
+} from "@/store/slices/apiKeysSlice";
 import {
   Plus,
   Copy,
@@ -11,23 +16,22 @@ import {
   ChevronUp,
   AlertTriangle,
 } from "lucide-react";
-import {
-  ApiKey,
+import type {
   CreateKeyInput,
-  ListApiKeysResponse,
   RateLimitOverride,
 } from "./types";
 
 export default function ApiKeysPage() {
-  const { data, loading, refetch } = useApi<ListApiKeysResponse>(
-    "/api-keys/keys",
-    {
-      limit: 50,
-    },
+  const dispatch = useAppDispatch();
+  const { keys, loading } = useAppSelector(
+    (state) => state.apiKeys,
   );
-  console.log("api key data is", data);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    dispatch(fetchApiKeys(50));
+  }, [dispatch]);
 
   const handleRevoke = async (keyId: string) => {
     if (
@@ -36,17 +40,11 @@ export default function ApiKeysPage() {
       )
     )
       return;
-    try {
-      await apiRequest(`/api-keys/keys/${keyId}`, { method: "DELETE" });
-      refetch();
-    } catch (err: any) {
-      alert(err.message);
-    }
+    dispatch(revokeApiKey(keyId));
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    // In a real app, show a toast here
   };
 
   return (
@@ -94,7 +92,7 @@ export default function ApiKeysPage() {
                   </td>
                 </tr>
               ) : (
-                (data?.keys || []).map((key: ApiKey) => (
+                (keys || []).map((key) => (
                   <tr
                     key={key.id}
                     className="hover:bg-[#1A1A2E]/[0.01] transition-colors"
@@ -216,7 +214,8 @@ function CreateKeyModal({
   onClose: () => void;
   onSuccess: (key: string) => void;
 }) {
-  const [loading, setLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const { creating } = useAppSelector((state) => state.apiKeys);
   const [showOverrides, setShowOverrides] = useState(false);
   const [formData, setFormData] = useState<CreateKeyInput>({
     name: "",
@@ -227,16 +226,9 @@ function CreateKeyModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await apiRequest<{ apiKey: string }>("/api-keys/keys", {
-        method: "POST",
-        body: JSON.stringify(formData),
-      });
-      onSuccess(res.apiKey);
-    } catch (err: any) {
-      alert(err.message);
-      setLoading(false);
+    const result = await dispatch(createApiKey(formData));
+    if (createApiKey.fulfilled.match(result)) {
+      onSuccess(result.payload.apiKey);
     }
   };
 
@@ -381,10 +373,10 @@ function CreateKeyModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={creating}
               className="flex-1 h-10 bg-[#1A1A2E] text-[#F7F5F0] rounded-lg text-[14px] font-medium hover:bg-[#2d2d4e] transition-colors flex items-center justify-center gap-2"
             >
-              {loading ? "Creating..." : "Create Key"}
+              {creating ? "Creating..." : "Create Key"}
             </button>
           </div>
         </form>

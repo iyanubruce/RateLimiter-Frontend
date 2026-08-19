@@ -11,15 +11,19 @@ import {
   ArrowRight,
   Loader2,
 } from "lucide-react";
-import axios from "axios";
-import { API_BASE_URL } from "@/lib";
 import { FormData } from "./types";
 import { ErrorBanner } from "@/components/error-banner";
 import { validateField } from "./helpers";
 import { BrandPanel } from "./components";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { register, clearError } from "@/store/slices/authSlice";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { loading: authLoading, error: authError } = useAppSelector(
+    (state) => state.auth,
+  );
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [formData, setFormData] = useState<FormData>({
@@ -39,8 +43,6 @@ export default function SignUpPage() {
     Partial<Record<keyof FormData, boolean>>
   >({});
   const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("ratelimitr_token");
@@ -60,7 +62,6 @@ export default function SignUpPage() {
 
     setFormData((prev) => ({ ...prev, [name]: newValue }));
 
-    // Re-validate if field was already touched
     if (touched[name as keyof FormData]) {
       const error = validateField(name as keyof FormData, newValue);
       setErrors((prev) => ({ ...prev, [name]: error }));
@@ -90,38 +91,22 @@ export default function SignUpPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setApiError(null);
+    dispatch(clearError());
 
     if (!validateAll()) return;
 
-    setIsSubmitting(true);
-
-    try {
-      const { data } = await axios.post(`${API_BASE_URL}/auth/register`, {
+    const result = await dispatch(
+      register({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
         password: formData.password,
         organizationName: formData.organizationName,
         organizationEmail: formData.organizationEmail,
-      });
-
-      localStorage.setItem("ratelimitr_token", data.token);
-      localStorage.setItem("ratelimitr_user", JSON.stringify(data.user));
-
+      }),
+    );
+    if (register.fulfilled.match(result)) {
       router.push("/dashboard");
-    } catch (err) {
-      if (axios.isAxiosError(err)) {
-        setApiError(
-          err.response?.data?.message ||
-            "Failed to create account. Please try again.",
-        );
-      } else {
-        setApiError(
-          err instanceof Error ? err.message : "An unexpected error occurred",
-        );
-      }
-      setIsSubmitting(false);
     }
   };
 
@@ -157,8 +142,11 @@ export default function SignUpPage() {
           </div>
 
           {/* API Error Banner */}
-          {apiError && (
-            <ErrorBanner message={apiError} onClose={() => setApiError(null)} />
+          {authError && (
+            <ErrorBanner
+              message={authError}
+              onClose={() => dispatch(clearError())}
+            />
           )}
 
           {/* Form */}
@@ -179,7 +167,7 @@ export default function SignUpPage() {
                 touched={!!touched.firstName}
                 onChange={handleChange}
                 onBlur={() => handleBlur("firstName")}
-                disabled={isSubmitting}
+                disabled={authLoading}
               />
               <InputField
                 label="Last name"
@@ -190,7 +178,7 @@ export default function SignUpPage() {
                 touched={!!touched.lastName}
                 onChange={handleChange}
                 onBlur={() => handleBlur("lastName")}
-                disabled={isSubmitting}
+                disabled={authLoading}
               />
             </div>
 
@@ -205,7 +193,7 @@ export default function SignUpPage() {
               touched={!!touched.email}
               onChange={handleChange}
               onBlur={() => handleBlur("email")}
-              disabled={isSubmitting}
+              disabled={authLoading}
             />
 
             {/* Password */}
@@ -219,7 +207,7 @@ export default function SignUpPage() {
               touched={!!touched.password}
               onChange={handleChange}
               onBlur={() => handleBlur("password")}
-              disabled={isSubmitting}
+              disabled={authLoading}
               rightElement={
                 <button
                   type="button"
@@ -254,7 +242,7 @@ export default function SignUpPage() {
               touched={!!touched.organizationName}
               onChange={handleChange}
               onBlur={() => handleBlur("organizationName")}
-              disabled={isSubmitting}
+              disabled={authLoading}
             />
 
             {/* Organization Email */}
@@ -268,7 +256,7 @@ export default function SignUpPage() {
               touched={!!touched.organizationEmail}
               onChange={handleChange}
               onBlur={() => handleBlur("organizationEmail")}
-              disabled={isSubmitting}
+              disabled={authLoading}
             />
 
             {/* Terms checkbox */}
@@ -280,7 +268,7 @@ export default function SignUpPage() {
                   checked={formData.terms}
                   onChange={handleChange}
                   onBlur={() => handleBlur("terms")}
-                  disabled={isSubmitting}
+                  disabled={authLoading}
                   className="sr-only"
                   aria-invalid={
                     touched.terms && errors.terms ? "true" : "false"
@@ -295,7 +283,7 @@ export default function SignUpPage() {
                           ? "border-red-500/40 bg-white"
                           : "border-[#1A1A2E]/20 bg-white group-hover:border-[#1A1A2E]/40"
                     }
-                    ${isSubmitting ? "opacity-50" : ""}`}
+                    ${authLoading ? "opacity-50" : ""}`}
                 >
                   {formData.terms && (
                     <Check className="w-3 h-3 text-[#F7F5F0]" strokeWidth={3} />
@@ -329,15 +317,15 @@ export default function SignUpPage() {
             {/* Submit button */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={authLoading}
               className={`w-full h-12 bg-[#1A1A2E] text-[#F7F5F0] font-semibold rounded-full text-[14px] tracking-[-0.01em] transition-all flex items-center justify-center gap-2 mt-8
                 ${
-                  isSubmitting
+                  authLoading
                     ? "opacity-70 cursor-not-allowed"
                     : "hover:bg-[#2d2d4e]"
                 }`}
             >
-              {isSubmitting ? (
+              {authLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
                   Creating account...
