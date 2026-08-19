@@ -16,16 +16,11 @@ import {
   ChevronUp,
   AlertTriangle,
 } from "lucide-react";
-import type {
-  CreateKeyInput,
-  RateLimitOverride,
-} from "./types";
+import type { CreateKeyInput, RateLimitOverride } from "./types";
 
 export default function ApiKeysPage() {
   const dispatch = useAppDispatch();
-  const { keys, loading } = useAppSelector(
-    (state) => state.apiKeys,
-  );
+  const { keys, loading } = useAppSelector((state) => state.apiKeys);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
 
@@ -194,7 +189,6 @@ export default function ApiKeysPage() {
               onClick={() => {
                 setNewKey(null);
                 setShowCreateModal(false);
-                refetch();
               }}
               className="w-full bg-[#1A1A2E] text-[#F7F5F0] font-medium py-2.5 rounded-lg hover:bg-[#2d2d4e] transition-colors"
             >
