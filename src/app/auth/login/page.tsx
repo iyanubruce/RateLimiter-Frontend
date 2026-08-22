@@ -214,6 +214,38 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-6">
+            <div className="flex-1 h-px bg-[#1A1A2E]/10" />
+            <span className="text-[12px] text-[#1A1A2E]/30 uppercase tracking-[0.1em]">
+              or
+            </span>
+            <div className="flex-1 h-px bg-[#1A1A2E]/10" />
+          </div>
+
+          {/* Guest login button */}
+          <button
+            type="button"
+            disabled={authLoading}
+            onClick={async () => {
+              dispatch(clearError());
+              const result = await dispatch(
+                login({ email: "guest@example.com", password: "Password123@" }),
+              );
+              if (login.fulfilled.match(result)) {
+                router.push("/dashboard");
+              }
+            }}
+            className={`w-full h-10 border border-[#1A1A2E]/15 text-[#1A1A2E]/60 font-medium rounded-full text-[13px] tracking-[-0.01em] transition-all flex items-center justify-center gap-2
+              ${
+                authLoading
+                  ? "opacity-70 cursor-not-allowed"
+                  : "hover:bg-[#1A1A2E]/5 hover:border-[#1A1A2E]/25 hover:text-[#1A1A2E]/80"
+              }`}
+          >
+            Sign in as guest
+          </button>
+
           {/* Sign up link */}
           <p className="text-[13px] text-[#1A1A2E]/45 text-center mt-8 tracking-[-0.01em]">
             Don't have an account?{" "}
